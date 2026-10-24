@@ -1,0 +1,47 @@
+{
+ "background_color": "#0b0716",
+ "display": "fullscreen",
+ "icons": [
+  {
+   "sizes": "144x144",
+   "src": "index.144x144.png",
+   "type": "image/png"
+  },
+  {
+   "sizes": "180x180",
+   "src": "index.180x180.png",
+   "type": "image/png"
+  },
+  {
+   "sizes": "192x192",
+   "src": "index.192x192.png",
+   "type": "image/png"
+  },
+  {
+   "sizes": "512x512",
+   "src": "index.512x512.png",
+   "type": "image/png",
+   "purpose": "any"
+  }
+ ],
+ "name": "TURNCOAT",
+ "orientation": "portrait",
+ "start_url": "./index.html",
+ "short_name": "TURNCOAT",
+ "description": "TURNCOAT - Don't run from it. Ride it. An endless runner through Nairobi 2080 by Patrice Tinega / Tinega Studios.",
+ "author": "Patrice Tinega, Tinega Studios",
+ "developer": {
+  "name": "Tinega Studios"
+ },
+ "lang": "en",
+ "id": "./index.html",
+ "scope": "./",
+ "theme_color": "#0b0716",
+ "display_override": [
+  "fullscreen",
+  "standalone"
+ ],
+ "categories": [
+  "games"
+ ]
+}

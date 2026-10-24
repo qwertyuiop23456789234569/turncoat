@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8">
+		<meta name="viewport" content="width=device-width, height=device-height, user-scalable=no, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover">
+		<meta name="author" content="Patrice Tinega, Tinega Studios">
+		<meta name="description" content="TURNCOAT - Don't run from it. Ride it. A Tinega Studios game by Patrice Tinega.">
+		<meta name="application-name" content="TURNCOAT">
+		<title>TURNCOAT - Tinega Studios</title>
+		<style>
+html, body, #canvas {
+	margin: 0;
+	padding: 0;
+	border: 0;
+}
+
+html, body {
+	position: fixed;
+	inset: 0;
+	width: 100%;
+	height: 100%;
+	overflow: hidden;
+	overscroll-behavior: none;
+}
+
+body {
+	color: white;
+	background-color: #0b0716;
+	touch-action: none;
+	-webkit-user-select: none;
+	user-select: none;
+	-webkit-touch-callout: none;
+	-webkit-tap-highlight-color: transparent;
+}
+
+#safe-probe {
+	position: fixed;
+	visibility: hidden;
+	pointer-events: none;
+	top: 0;
+	left: 0;
+	padding-top: env(safe-area-inset-top, 0px);
+	padding-bottom: env(safe-area-inset-bottom, 0px);
+	padding-left: env(safe-area-inset-left, 0px);
+	padding-right: env(safe-area-inset-right, 0px);
+}
+
+
+
+#canvas {
+	display: block;
+}
+
+#canvas:focus {
+	outline: none;
+}
+
+#status, #status-splash, #status-progress {
+	position: absolute;
+	left: 0;
+	right: 0;
+}
+
+#status, #status-splash {
+	top: 0;
+	bottom: 0;
+}
+
+#status {
+	background-color: #1a1238;
+	display: flex;
+	flex-direction: column;
+	justify-content: center;
+	align-items: center;
+	visibility: hidden;
+}
+
+#status-splash {
+	max-height: 100%;
+	max-width: 100%;
+	margin: auto;
+}
+
+#status-splash.show-image--false {
+	display: none;
+}
+
+#status-splash.fullsize--true {
+	height: 100%;
+	width: 100%;
+	object-fit: cover;
+}
+
+#status-splash.use-filter--false {
+	image-rendering: pixelated;
+}
+
+#status-progress, #status-notice {
+	display: none;
+}
+
+#status-progress {
+	bottom: 10%;
+	width: 50%;
+	margin: 0 auto;
+}
+
+#status-notice {
+	background-color: #5b3943;
+	border-radius: 0.5rem;
+	border: 1px solid #9b3943;
+	color: #e0e0e0;
+	font-family: 'Noto Sans', 'Droid Sans', Arial, sans-serif;
+	line-height: 1.3;
+	margin: 0 2rem;
+	overflow: hidden;
+	padding: 1rem;
+	text-align: center;
+	z-index: 1;
+}
+		</style>
+		<link id="-gd-engine-icon" rel="icon" type="image/png" href="index.icon.png" />
+<link rel="apple-touch-icon" href="index.apple-touch-icon.png"/>
+<link rel="manifest" href="index.manifest.json">
+<meta name="apple-mobile-web-app-capable" content="yes"><meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"><meta name="apple-mobile-web-app-title" content="TURNCOAT"><meta name="theme-color" content="#0b0716"><link rel="apple-touch-icon" sizes="180x180" href="index.180x180.png"><link rel="apple-touch-startup-image" href="index.png">
+	</head>
+	<body>
+		<canvas id="canvas">
+			Your browser does not support the canvas tag.
+		</canvas>
+
+		<noscript>
+			Your browser does not support JavaScript.
+		</noscript>
+
+		<div id="safe-probe"></div>
+		<div id="status">
+			<img id="status-splash" class="show-image--true fullsize--true use-filter--true" src="index.png" alt="">
+			<progress id="status-progress"></progress>
+			<div id="status-notice"></div>
+		</div>
+
+		<script>
+// TURNCOAT web size budget: index.wasm / index.pck ship gzip-compressed as *.gz (any static host works,
+// no server config needed). They are inflated in the browser with DecompressionStream (iOS 16.4+).
+// If a host already sends them with Content-Encoding (bytes are no longer gzip), they pass through untouched.
+(function () {
+	const nativeFetch = window.fetch.bind(window);
+	window.fetch = function (input, init) {
+		const url = (typeof input === 'string') ? input : (input && input.url) || '';
+		const m = url.match(/\.(wasm|pck)(\?.*)?$/);
+		if (!m || typeof DecompressionStream === 'undefined') {
+			return nativeFetch(input, init);
+		}
+		const gzUrl = url.replace(/\.(wasm|pck)(\?.*)?$/, '.$1.gz$2');
+		return nativeFetch(gzUrl, init).then(async (res) => {
+			if (!res.ok) { return nativeFetch(input, init); }
+			const reader = res.body.getReader();
+			const first = await reader.read();
+			const head = first.value || new Uint8Array(0);
+			const isGz = head.length > 1 && head[0] === 0x1f && head[1] === 0x8b;
+			let stream = new ReadableStream({
+				start(ctrl) { if (head.length) { ctrl.enqueue(head); } if (first.done) { ctrl.close(); } },
+				async pull(ctrl) { const r = await reader.read(); if (r.done) { ctrl.close(); } else { ctrl.enqueue(r.value); } },
+				cancel(e) { reader.cancel(e); },
+			});
+			if (isGz) { stream = stream.pipeThrough(new DecompressionStream('gzip')); }
+			const type = m[1] === 'wasm' ? 'application/wasm' : 'application/octet-stream';
+			return new Response(stream, { status: 200, headers: { 'Content-Type': type } });
+		});
+	};
+}());
+// TURNCOAT (Tinega Studios): iOS Safari only lets Web Audio start inside a user gesture.
+// Track every AudioContext the engine creates and resume them on the first touch/click/key.
+(function () {
+	const Native = window.AudioContext || window.webkitAudioContext;
+	if (!Native) { return; }
+	const ctxs = [];
+	function Tracked(...a) { const c = new Native(...a); ctxs.push(c); return c; }
+	Tracked.prototype = Native.prototype;
+	window.AudioContext = Tracked;
+	if (window.webkitAudioContext) { window.webkitAudioContext = Tracked; }
+	function unlock() {
+		ctxs.forEach((c) => {
+			if (c.state !== 'running') {
+				c.resume();
+				// a 1-sample silent buffer is the reliable iOS unlock
+				try { const b = c.createBuffer(1, 1, 22050); const s = c.createBufferSource(); s.buffer = b; s.connect(c.destination); s.start(0); } catch (e) { /* ignore */ }
+			}
+		});
+		if (ctxs.length && ctxs.every((c) => c.state === 'running')) {
+			['touchend', 'pointerup', 'click', 'keydown'].forEach((e) => window.removeEventListener(e, unlock, true));
+		}
+	}
+	['touchend', 'pointerup', 'click', 'keydown'].forEach((e) => window.addEventListener(e, unlock, true));
+	document.addEventListener('visibilitychange', () => { if (!document.hidden) { ctxs.forEach((c) => c.resume && c.resume()); } });
+}());
+// Safe-area insets (notch / home indicator) in CSS px, read by the game via JavaScriptBridge.
+window.turncoatSafeArea = function () {
+	const s = getComputedStyle(document.getElementById('safe-probe'));
+	return JSON.stringify({ top: parseFloat(s.paddingTop) || 0, bottom: parseFloat(s.paddingBottom) || 0, left: parseFloat(s.paddingLeft) || 0, right: parseFloat(s.paddingRight) || 0, h: window.innerHeight, w: window.innerWidth });
+};
+// Stop iOS rubber-banding / double-tap zoom / long-press menus.
+document.addEventListener('touchmove', (e) => e.preventDefault(), { passive: false });
+document.addEventListener('gesturestart', (e) => e.preventDefault());
+document.addEventListener('contextmenu', (e) => e.preventDefault());
+		</script>
+		<script src="index.js"></script>
+		<script>
+const GODOT_CONFIG = {"args":[],"canvasResizePolicy":2,"emscriptenPoolSize":8,"ensureCrossOriginIsolationHeaders":false,"executable":"index","experimentalVK":false,"fileSizes":{"index.pck":55395716,"index.wasm":39514754},"focusCanvas":true,"gdextensionLibs":[],"godotPoolSize":4,"serviceWorker":"index.service.worker.js"};
+const GODOT_THREADS_ENABLED = false;
+const engine = new Engine(GODOT_CONFIG);
+
+(function () {
+	const statusOverlay = document.getElementById('status');
+	const statusProgress = document.getElementById('status-progress');
+	const statusNotice = document.getElementById('status-notice');
+
+	let initializing = true;
+	let statusMode = '';
+
+	function setStatusMode(mode) {
+		if (statusMode === mode || !initializing) {
+			return;
+		}
+		if (mode === 'hidden') {
+			statusOverlay.remove();
+			initializing = false;
+			return;
+		}
+		statusOverlay.style.visibility = 'visible';
+		statusProgress.style.display = mode === 'progress' ? 'block' : 'none';
+		statusNotice.style.display = mode === 'notice' ? 'block' : 'none';
+		statusMode = mode;
+	}
+
+	function setStatusNotice(text) {
+		while (statusNotice.lastChild) {
+			statusNotice.removeChild(statusNotice.lastChild);
+		}
+		const lines = text.split('\n');
+		lines.forEach((line) => {
+			statusNotice.appendChild(document.createTextNode(line));
+			statusNotice.appendChild(document.createElement('br'));
+		});
+	}
+
+	function displayFailureNotice(err) {
+		console.error(err);
+		if (err instanceof Error) {
+			setStatusNotice(err.message);
+		} else if (typeof err === 'string') {
+			setStatusNotice(err);
+		} else {
+			setStatusNotice('An unknown error occurred.');
+		}
+		setStatusMode('notice');
+		initializing = false;
+	}
+
+	const missing = Engine.getMissingFeatures({
+		threads: GODOT_THREADS_ENABLED,
+	});
+
+	if (missing.length !== 0) {
+		if (GODOT_CONFIG['serviceWorker'] && GODOT_CONFIG['ensureCrossOriginIsolationHeaders'] && 'serviceWorker' in navigator) {
+			let serviceWorkerRegistrationPromise;
+			try {
+				serviceWorkerRegistrationPromise = navigator.serviceWorker.getRegistration();
+			} catch (err) {
+				serviceWorkerRegistrationPromise = Promise.reject(new Error('Service worker registration failed.'));
+			}
+			// There's a chance that installing the service worker would fix the issue
+			Promise.race([
+				serviceWorkerRegistrationPromise.then((registration) => {
+					if (registration != null) {
+						return Promise.reject(new Error('Service worker already exists.'));
+					}
+					return registration;
+				}).then(() => engine.installServiceWorker()),
+				// For some reason, `getRegistration()` can stall
+				new Promise((resolve) => {
+					setTimeout(() => resolve(), 2000);
+				}),
+			]).then(() => {
+				// Reload if there was no error.
+				window.location.reload();
+			}).catch((err) => {
+				console.error('Error while registering service worker:', err);
+			});
+		} else {
+			// Display the message as usual
+			const missingMsg = 'Error\nThe following features required to run Godot projects on the Web are missing:\n';
+			displayFailureNotice(missingMsg + missing.join('\n'));
+		}
+	} else {
+		setStatusMode('progress');
+		engine.startGame({
+			'onProgress': function (current, total) {
+				if (current > 0 && total > 0) {
+					statusProgress.value = current;
+					statusProgress.max = total;
+				} else {
+					statusProgress.removeAttribute('value');
+					statusProgress.removeAttribute('max');
+				}
+			},
+		}).then(() => {
+			setStatusMode('hidden');
+		}, displayFailureNotice);
+	}
+}());
+		</script>
+	</body>
+</html>
+
