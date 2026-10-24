@@ -4,7 +4,7 @@
 // Incrementing CACHE_VERSION will kick off the install event and force
 // previously cached resources to be updated from the network.
 /** @type {string} */
-const CACHE_VERSION = 'v3.1-1792877944';
+const CACHE_VERSION = 'v3.2-1792883109';
 /** @type {string} */
 const CACHE_PREFIX = 'TURNCOAT-sw-cache-';
 const CACHE_NAME = CACHE_PREFIX + CACHE_VERSION;

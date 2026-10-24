@@ -205,9 +205,65 @@ document.addEventListener('touchmove', (e) => e.preventDefault(), { passive: fal
 document.addEventListener('gesturestart', (e) => e.preventDefault());
 document.addEventListener('contextmenu', (e) => e.preventDefault());
 		</script>
+		<script>
+// v3.2 iOS/Safari audio unlock. Godot's Web Audio context starts "suspended" and iOS only lets it run when
+// resume() is called inside a real user gesture (touchend / click, not touchstart). iOS also routes Web Audio
+// through the ringer, so the silent switch muted the whole game: a looping silent <audio> element plus
+// navigator.audioSession.type = 'playback' (iOS 17+) moves the page to the media channel like a video would.
+(function () {
+	const ctxs = [];
+	window.__tcAudio = { ctxs: ctxs, unlocked: false, starts: 0 };
+	['AudioContext', 'webkitAudioContext'].forEach(function (n) {
+		const C = window[n];
+		if (!C) return;
+		const W = function (opts) { const c = new C(opts); ctxs.push(c); return c; };
+		W.prototype = C.prototype;
+		window[n] = W;
+	});
+	if (window.AudioBufferSourceNode) {
+		const st = AudioBufferSourceNode.prototype.start;
+		AudioBufferSourceNode.prototype.start = function () { window.__tcAudio.starts++; return st.apply(this, arguments); };
+	}
+	let el = null;
+	function silentLoop() {
+		if (el) return;
+		// 0.1 s of 8 kHz 8-bit silence
+		const n = 800, b = new Uint8Array(44 + n);
+		const dv = new DataView(b.buffer);
+		const w = function (o, s) { for (let i = 0; i < s.length; i++) b[o + i] = s.charCodeAt(i); };
+		w(0, 'RIFF'); dv.setUint32(4, 36 + n, true); w(8, 'WAVEfmt '); dv.setUint32(16, 16, true);
+		dv.setUint16(20, 1, true); dv.setUint16(22, 1, true); dv.setUint32(24, 8000, true); dv.setUint32(28, 8000, true);
+		dv.setUint16(32, 1, true); dv.setUint16(34, 8, true); w(36, 'data'); dv.setUint32(40, n, true);
+		b.fill(128, 44);
+		el = document.createElement('audio');
+		el.src = URL.createObjectURL(new Blob([b], { type: 'audio/wav' }));
+		el.loop = true;
+		el.setAttribute('playsinline', '');
+		el.volume = 0.01;
+	}
+	function unlock() {
+		try { if (navigator.audioSession) navigator.audioSession.type = 'playback'; } catch (e) {}
+		try { silentLoop(); const pr = el.play(); if (pr && pr.catch) pr.catch(function () {}); } catch (e) {}
+		ctxs.forEach(function (c) {
+			try {
+				if (c.state !== 'running') c.resume();
+				// a 1-sample buffer started inside the gesture is what finally wakes older iOS versions
+				const s = c.createBufferSource(); s.buffer = c.createBuffer(1, 1, 22050); s.connect(c.destination); s.start(0);
+			} catch (e) {}
+		});
+		window.__tcAudio.unlocked = ctxs.length > 0 && ctxs.every(function (c) { return c.state === 'running'; });
+	}
+	['touchend', 'click', 'keydown', 'pointerup'].forEach(function (ev) {
+		window.addEventListener(ev, unlock, { capture: true, passive: true });
+	});
+	document.addEventListener('visibilitychange', function () {
+		if (!document.hidden) ctxs.forEach(function (c) { try { if (c.state !== 'running') c.resume(); } catch (e) {} });
+	});
+})();
+		</script>
 		<script src="index.js"></script>
 		<script>
-const GODOT_CONFIG = {"args":[],"canvasResizePolicy":2,"emscriptenPoolSize":8,"ensureCrossOriginIsolationHeaders":false,"executable":"index","experimentalVK":false,"fileSizes":{"index.pck":59935536,"index.wasm":39514754},"focusCanvas":true,"gdextensionLibs":[],"godotPoolSize":4,"serviceWorker":"index.service.worker.js"};
+const GODOT_CONFIG = {"args":[],"canvasResizePolicy":2,"emscriptenPoolSize":8,"ensureCrossOriginIsolationHeaders":false,"executable":"index","experimentalVK":false,"fileSizes":{"index.pck":59773804,"index.wasm":39514754},"focusCanvas":true,"gdextensionLibs":[],"godotPoolSize":4,"serviceWorker":"index.service.worker.js"};
 const GODOT_THREADS_ENABLED = false;
 const engine = new Engine(GODOT_CONFIG);
 
